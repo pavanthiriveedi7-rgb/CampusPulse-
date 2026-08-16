@@ -131,28 +131,15 @@ GRADE_POINTS = {
 
 @st.cache_data
 def load_raw_data():
-    """Load the CSV file."""
+    """Load the structured Excel file."""
 
     if not DATA_PATH.exists():
         return None
 
-    try:
-        return pd.read_csv(
-            DATA_PATH,
-            header=None,
-            dtype=str,
-            encoding="utf-8",
-            on_bad_lines="skip",
-        )
-    except UnicodeDecodeError:
-        return pd.read_csv(
-            DATA_PATH,
-            header=None,
-            dtype=str,
-            encoding="latin1",
-            on_bad_lines="skip",
-        )
-
+    return pd.read_excel(
+        DATA_PATH,
+        dtype=str
+    )
 
 @st.cache_data
 def extract_result_rows(raw_data):
