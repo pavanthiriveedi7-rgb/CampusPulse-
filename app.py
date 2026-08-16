@@ -141,11 +141,38 @@ def load_raw_data():
         dtype=str
     )
 
+
 @st.cache_data
 def extract_result_rows(raw_data):
-    """Find rows containing hall-ticket, subject, grade, and credits."""
+    """Prepare the structured academic dataset."""
 
-    columns = [
+    if raw_data is None or raw_data.empty:
+        return pd.DataFrame()
+
+    data = raw_data.copy()
+
+    data.columns = [
+        str(column).strip()
+        for column in data.columns
+    ]
+
+    column_mapping = {
+        "Htno": "RegdNo",
+        "HTNO": "RegdNo",
+        "Hall Ticket Number": "RegdNo",
+        "Subcode": "Subcode",
+        "Subject": "Subject",
+        "Subname": "Subject",
+        "Internals": "Internals",
+        "Internal": "Internals",
+        "Grade": "Grade",
+        "Credits": "Credits",
+        "Cred": "Credits",
+    }
+
+    data = data.rename(columns=column_mapping)
+
+    required_columns = [
         "RegdNo",
         "Subcode",
         "Subject",
@@ -154,74 +181,53 @@ def extract_result_rows(raw_data):
         "Credits",
     ]
 
-    if raw_data is None or raw_data.empty:
-        return pd.DataFrame(columns=columns)
+    missing_columns = [
+        column
+        for column in required_columns
+        if column not in data.columns
+    ]
 
-    records = []
+    if missing_columns:
+        st.error(
+            "Missing columns: "
+            + ", ".join(missing_columns)
+        )
 
-    for _, row in raw_data.iterrows():
-        values = [
-            str(value).strip()
-            for value in row.tolist()
-            if pd.notna(value) and str(value).strip()
-        ]
+        st.write("Columns found in your file:")
+        st.write(list(data.columns))
 
-        if len(values) < 6:
-            continue
+        return pd.DataFrame()
 
-        for i in range(len(values) - 5):
-            hall_ticket = values[i]
-            subcode = values[i + 1]
-            subject = values[i + 2]
-            internals = values[i + 3]
-            grade = values[i + 4].upper()
-            credits_text = values[i + 5]
+    data = data[required_columns].copy()
 
-            is_hall_ticket = (
-                len(hall_ticket) >= 8
-                and hall_ticket[0].isdigit()
-                and "MC" in hall_ticket.upper()
-            )
+    data["RegdNo"] = data["RegdNo"].astype(str).str.strip()
+    data["Subcode"] = data["Subcode"].astype(str).str.strip()
+    data["Subject"] = data["Subject"].astype(str).str.strip()
+    data["Grade"] = (
+        data["Grade"]
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
 
-            is_subcode = (
-                subcode.startswith("R")
-                and len(subcode) >= 5
-            )
+    data["Credits"] = pd.to_numeric(
+        data["Credits"],
+        errors="coerce"
+    )
 
-            is_grade = grade in GRADE_POINTS
+    data = data.dropna(subset=["RegdNo", "Credits"])
 
-            try:
-                credits = float(credits_text)
-            except ValueError:
-                continue
+    data["GradePoint"] = data["Grade"].map(GRADE_POINTS)
 
-            if (
-                is_hall_ticket
-                and is_subcode
-                and is_grade
-                and credits >= 0
-            ):
-                records.append(
-                    {
-                        "RegdNo": hall_ticket,
-                        "Subcode": subcode,
-                        "Subject": subject,
-                        "Internals": internals,
-                        "Grade": grade,
-                        "Credits": credits,
-                    }
-                )
+    failed_grades = {
+        "F",
+        "ABSENT",
+        "AB",
+        "WH",
+        "MP",
+    }
 
-    if not records:
-        return pd.DataFrame(columns=columns)
-
-    result = pd.DataFrame(records).drop_duplicates()
-
-    result["GradePoint"] = result["Grade"].map(GRADE_POINTS)
-
-    failed_grades = {"F", "ABSENT", "AB", "WH", "MP"}
-
-    result["Status"] = result["Grade"].apply(
+    data["Status"] = data["Grade"].apply(
         lambda grade: (
             "Needs Attention"
             if grade in failed_grades
@@ -229,7 +235,7 @@ def extract_result_rows(raw_data):
         )
     )
 
-    return result.reset_index(drop=True)
+    return data.drop_duplicates().reset_index(drop=True)
 
 
 def calculate_sgpa(student_results):
@@ -426,7 +432,7 @@ elif page == "Results Explorer":
     if raw_data is None:
         st.error(
             "CSV file not found. Confirm that it exists at "
-            "data/combinepdf.csv."
+            "data/R23_R24_structured.xlsx."
         )
     else:
         hall_ticket = st.text_input(
@@ -461,7 +467,7 @@ elif page == "Results Explorer":
                 mime="text/csv",
             )
 
-        with st.expander("Show raw CSV preview"):
+        with st.expander("Show raw data preview"):
             st.dataframe(
                 raw_data.head(50),
                 use_container_width=True,
