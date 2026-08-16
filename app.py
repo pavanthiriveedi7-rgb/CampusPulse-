@@ -108,7 +108,7 @@ st.markdown(
 )
 
 
-DATA_PATH = Path("data/combinepdf.csv")
+DATA_PATH = Path("data/R23_R24_structured.xlsx")
 
 
 GRADE_POINTS = {
